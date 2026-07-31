@@ -1,0 +1,6 @@
+{
+  "name": "Zip to GitHub Auto Pusher",
+  "description": "Automatically detect ZIP structures, compare file changes against GitHub repositories, create new repos, and push code seamlessly.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
