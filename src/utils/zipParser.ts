@@ -3,18 +3,43 @@ import { ExtractedFile, ZipAnalysis } from '../types';
 
 const IGNORED_PATTERNS = [
   '__MACOSX/',
+  '._',
   '.DS_Store',
   'Thumbs.db',
   'desktop.ini',
   '.git/',
-  'node_modules/'
+  'node_modules/',
+  '.next/',
+  '.nuxt/',
+  '.output/',
+  '.vercel/',
+  'dist/',
+  'build/',
+  'out/',
+  'coverage/',
+  '.cache/',
+  '.turbo/',
+  '.idea/',
+  '.vscode/',
 ];
+
+const IGNORED_EXACT_FILENAMES = new Set([
+  '.ds_store',
+  'thumbs.db',
+  'desktop.ini',
+  '.env',
+  '.env.local',
+  '.env.development.local',
+  '.env.test.local',
+  '.env.production.local',
+]);
 
 const TEXT_EXTENSIONS = new Set([
   'txt', 'md', 'json', 'js', 'jsx', 'ts', 'tsx', 'css', 'scss', 'html', 'xml',
   'svg', 'yaml', 'yml', 'env', 'example', 'py', 'java', 'c', 'cpp', 'h', 'hpp',
   'cs', 'go', 'rs', 'php', 'rb', 'sh', 'bash', 'zsh', 'sql', 'gitignore',
-  'dockerignore', 'editorconfig', 'babelrc', 'eslintrc', 'prettierrc', 'toml'
+  'dockerignore', 'editorconfig', 'babelrc', 'eslintrc', 'prettierrc', 'toml',
+  'cjs', 'mjs', 'lock'
 ]);
 
 export function isTextFile(filename: string): boolean {
@@ -26,7 +51,7 @@ export function isTextFile(filename: string): boolean {
   if (TEXT_EXTENSIONS.has(ext)) return true;
   // Common filenames without extension
   const lower = filename.toLowerCase();
-  if (['dockerfile', 'makefile', 'readme', 'license', 'changelog'].includes(lower)) {
+  if (['dockerfile', 'makefile', 'readme', 'license', 'changelog', '.gitignore', '.env.example'].includes(lower)) {
     return true;
   }
   return false;
@@ -36,32 +61,47 @@ export async function parseZipFile(file: File): Promise<ZipAnalysis> {
   const zip = new JSZip();
   const loadedZip = await zip.loadAsync(file);
 
-  const rawEntries: { path: string; entry: JSZip.JSZipObject }[] = [];
+  const rawEntries: { cleanPath: string; entry: JSZip.JSZipObject }[] = [];
 
   loadedZip.forEach((relativePath, entry) => {
     if (entry.dir) return;
 
-    // Check ignore patterns
-    const shouldIgnore = IGNORED_PATTERNS.some(pattern => 
-      relativePath.includes(pattern) || relativePath.endsWith(pattern)
-    );
+    // Normalize path slashes
+    const cleanPath = relativePath.replace(/\\/g, '/').replace(/^\/+/, '');
+    if (!cleanPath) return;
+
+    const lowerPath = cleanPath.toLowerCase();
+    const fileName = cleanPath.split('/').pop()?.toLowerCase() || '';
+
+    // Check exact ignored filenames or patterns
+    if (IGNORED_EXACT_FILENAMES.has(fileName)) return;
+    if (fileName.startsWith('._')) return; // Apple double files
+    if (fileName.endsWith('.log')) return; // Log files
+
+    const shouldIgnore = IGNORED_PATTERNS.some(pattern => {
+      const lowerPattern = pattern.toLowerCase();
+      return lowerPath.includes(lowerPattern) || lowerPath.endsWith(lowerPattern);
+    });
 
     if (!shouldIgnore) {
-      rawEntries.push({ path: relativePath, entry });
+      rawEntries.push({ cleanPath, entry });
     }
   });
 
   if (rawEntries.length === 0) {
-    throw new Error('The ZIP archive is empty or contains only ignored files.');
+    throw new Error('The ZIP archive is empty or contains only build/ignored files (e.g. node_modules, .DS_Store).');
   }
 
-  // Detect common root folder (e.g., "repo-master/src/index.ts")
-  const pathParts = rawEntries.map(e => e.path.split('/'));
+  // Detect common root folder (e.g., "bill-Mitra-vercel-main/src/index.ts")
   let commonRoot = '';
-  if (pathParts.length > 0 && pathParts[0].length > 1) {
-    const candidateRoot = pathParts[0][0];
-    const allHaveCandidate = pathParts.every(parts => parts.length > 1 && parts[0] === candidateRoot);
-    if (allHaveCandidate) {
+  const firstParts = rawEntries[0].cleanPath.split('/');
+  if (firstParts.length > 1) {
+    const candidateRoot = firstParts[0];
+    const allShareRoot = rawEntries.every(item => {
+      const parts = item.cleanPath.split('/');
+      return parts.length > 1 && parts[0] === candidateRoot;
+    });
+    if (allShareRoot) {
       commonRoot = candidateRoot;
     }
   }
@@ -70,13 +110,10 @@ export async function parseZipFile(file: File): Promise<ZipAnalysis> {
   const extMap = new Set<string>();
 
   for (const item of rawEntries) {
-    let normalizedPath = item.path;
+    let normalizedPath = item.cleanPath;
     if (commonRoot && normalizedPath.startsWith(commonRoot + '/')) {
       normalizedPath = normalizedPath.slice(commonRoot.length + 1);
     }
-    
-    // Normalize any backslashes and remove leading slashes
-    normalizedPath = normalizedPath.replace(/\\/g, '/').replace(/^\/+/, '');
 
     if (!normalizedPath) continue;
 

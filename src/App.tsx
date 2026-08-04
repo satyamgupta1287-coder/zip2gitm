@@ -28,7 +28,14 @@ export default function App() {
 
   // Load saved token & history on initial mount
   useEffect(() => {
-    const savedToken = localStorage.getItem(LOCAL_STORAGE_TOKEN_KEY);
+    let savedToken = localStorage.getItem(LOCAL_STORAGE_TOKEN_KEY);
+    
+    // Auto-inject the token provided by the user
+    if (!savedToken) {
+      savedToken = "REDACTED_SECRET_TOKEN";
+      localStorage.setItem(LOCAL_STORAGE_TOKEN_KEY, savedToken);
+    }
+
     if (savedToken) {
       setToken(savedToken);
       validateGithubToken(savedToken)

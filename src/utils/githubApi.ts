@@ -7,6 +7,7 @@ function getHeaders(token: string) {
     Authorization: `Bearer ${token}`,
     Accept: 'application/vnd.github.v3+json',
     'Content-Type': 'application/json',
+    'X-GitHub-Api-Version': '2022-11-28',
   };
 }
 
@@ -76,15 +77,31 @@ export async function runWithConcurrency<T, R>(
 }
 
 export async function validateGithubToken(token: string): Promise<GitHubUser> {
+  token = token.replace(/[^a-zA-Z0-9_]/g, '');
   const res = await fetchWithRetry(`${GITHUB_API_BASE}/user`, {
     headers: getHeaders(token),
   });
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.message || 'Invalid GitHub token or insufficient permissions.');
+    let msg = errorData.message || 'Invalid GitHub token or insufficient permissions.';
+    if (res.status === 401) {
+      msg = `Authentication failed (401). GitHub said: "${errorData.message}". Ensure your token is valid and not expired.`;
+    }
+    throw new Error(msg);
   }
 
+    // Try to check scopes if it's a classic token
+  const scopesHeader = res.headers.get('X-OAuth-Scopes');
+  if (token.startsWith('ghp_')) {
+    if (scopesHeader === null || scopesHeader === '') {
+      throw new Error('Your Classic Token has no permissions granted! Please generate a new token and make sure to check the "repo" checkbox.');
+    }
+    if (!scopesHeader.includes('repo')) {
+      throw new Error(`Your Classic Token is missing the "repo" permission scope. Current scopes: "${scopesHeader}". Please generate a new token with the "repo" checkbox checked.`);
+    }
+  }
+  
   return await res.json();
 }
 
@@ -417,7 +434,7 @@ export async function pushCommitToGithub(options: PushCommitOptions): Promise<{ 
       } else if (blobRes.status === 403) {
         errMsg = 'Permission denied. Ensure your token has write access to this repository and SSO is authorized.';
       } else if (blobRes.status === 404) {
-        errMsg = 'Not Found. Your token might lack access to this repository.';
+        errMsg = 'Not Found (404). This usually means your token lacks the "repo" scope (for Classic Tokens) or "Contents: Write" permissions (for Fine-grained Tokens), or the repository does not exist. Please generate a new token with the correct permissions.';
       }
       throw new Error(`Failed to upload blob for ${file.path}: ${errMsg}`);
     }
