@@ -28,13 +28,7 @@ export default function App() {
 
   // Load saved token & history on initial mount
   useEffect(() => {
-    let savedToken = localStorage.getItem(LOCAL_STORAGE_TOKEN_KEY);
-    
-    // Auto-inject the token provided by the user
-    if (!savedToken) {
-      savedToken = "REDACTED_SECRET_TOKEN";
-      localStorage.setItem(LOCAL_STORAGE_TOKEN_KEY, savedToken);
-    }
+    const savedToken = localStorage.getItem(LOCAL_STORAGE_TOKEN_KEY);
 
     if (savedToken) {
       setToken(savedToken);

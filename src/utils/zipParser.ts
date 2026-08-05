@@ -42,6 +42,32 @@ const TEXT_EXTENSIONS = new Set([
   'cjs', 'mjs', 'lock'
 ]);
 
+const SECRET_PATTERNS = [
+  /ghp_[a-zA-Z0-9_]{20,}/g,
+  /github_pat_[a-zA-Z0-9_]{20,}/g,
+  /gho_[a-zA-Z0-9_]{20,}/g,
+  /ghu_[a-zA-Z0-9_]{20,}/g,
+  /ghs_[a-zA-Z0-9_]{20,}/g,
+  /ghr_[a-zA-Z0-9_]{20,}/g,
+  /sk-proj-[a-zA-Z0-9_\-]{20,}/g,
+  /sk-[a-zA-Z0-9_\-]{20,}/g,
+  /xox[baprs]-[a-zA-Z0-9_\-]{10,}/g,
+  /AKIA[0-9A-Z]{16}/g,
+];
+
+export function sanitizeTextSecrets(content: string): { text: string; count: number } {
+  let text = content;
+  let count = 0;
+  for (const pattern of SECRET_PATTERNS) {
+    const matches = text.match(pattern);
+    if (matches) {
+      count += matches.length;
+      text = text.replace(pattern, 'REDACTED_SECRET_TOKEN');
+    }
+  }
+  return { text, count };
+}
+
 export function isTextFile(filename: string): boolean {
   const parts = filename.split('.');
   if (parts.length === 1 && !filename.startsWith('.')) {
@@ -126,7 +152,8 @@ export async function parseZipFile(file: File): Promise<ZipAnalysis> {
     let content: string | Uint8Array;
 
     if (isText) {
-      content = await item.entry.async('text');
+      const rawText = await item.entry.async('text');
+      content = sanitizeTextSecrets(rawText).text;
     } else {
       content = await item.entry.async('uint8array');
     }

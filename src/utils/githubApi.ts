@@ -429,7 +429,15 @@ export async function pushCommitToGithub(options: PushCommitOptions): Promise<{ 
     if (!blobRes.ok) {
       const err = await blobRes.json().catch(() => ({}));
       let errMsg = err.message || 'API Error';
-      if (blobRes.status === 401 || errMsg.toLowerCase().includes('bad credentials')) {
+
+      if (err.errors && Array.isArray(err.errors) && err.errors.length > 0) {
+        const detailMsgs = err.errors.map((e: any) => e.message || JSON.stringify(e)).join(' | ');
+        errMsg += `: ${detailMsgs}`;
+      }
+
+      if (errMsg.toLowerCase().includes('secret detected') || errMsg.toLowerCase().includes('repository rule violations')) {
+        errMsg = `GitHub Secret Scanning blocked file "${file.path}" because it contains a hardcoded API token or secret key (e.g. ghp_...). Please use the "Sanitize Secrets" button in Step 1 to remove hardcoded tokens before pushing.`;
+      } else if (blobRes.status === 401 || errMsg.toLowerCase().includes('bad credentials')) {
         errMsg = 'Bad credentials. Your GitHub token is invalid, expired, or lacks write permissions. Please reconnect a valid PAT.';
       } else if (blobRes.status === 403) {
         errMsg = 'Permission denied. Ensure your token has write access to this repository and SSO is authorized.';

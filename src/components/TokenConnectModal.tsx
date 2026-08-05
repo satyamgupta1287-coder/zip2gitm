@@ -90,7 +90,7 @@ export const TokenConnectModal: React.FC<TokenConnectModalProps> = ({
                      setTokenInput(pastedData.replace(/[\s\r\n]+/g, ''));
                    }
                 }}
-                placeholder="REDACTED_SECRET_TOKEN"
+                placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
                 className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 font-mono pr-10"
               />
               <button

@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
-import { Upload, FileArchive, FolderTree, CheckCircle2, AlertCircle, RefreshCw, Plus, Trash2, FileText, X } from 'lucide-react';
+import { Upload, FileArchive, FolderTree, CheckCircle2, AlertCircle, RefreshCw, Plus, Trash2, FileText, X, ShieldCheck } from 'lucide-react';
 import { ZipAnalysis, ExtractedFile } from '../types';
-import { parseZipFile } from '../utils/zipParser';
+import { parseZipFile, sanitizeTextSecrets } from '../utils/zipParser';
 
 interface WorkspaceManagerProps {
   zipAnalysis: ZipAnalysis | null;
@@ -102,6 +102,37 @@ export const WorkspaceManager: React.FC<WorkspaceManagerProps> = ({
     }
   };
 
+  const handleSanitizeSecrets = () => {
+    if (!zipAnalysis) return;
+    let totalRedacted = 0;
+    const sanitizedFiles = zipAnalysis.files.map(f => {
+      if (!f.isBinary && typeof f.content === 'string') {
+        const { text, count } = sanitizeTextSecrets(f.content);
+        if (count > 0) {
+          totalRedacted += count;
+          return {
+            ...f,
+            content: text,
+            size: new Blob([text]).size,
+          };
+        }
+      }
+      return f;
+    });
+
+    if (totalRedacted > 0) {
+      onAnalysisUpdate({
+        ...zipAnalysis,
+        files: sanitizedFiles,
+      });
+      setError(`Successfully sanitized and redacted ${totalRedacted} hardcoded secret token(s) across staged files!`);
+      setTimeout(() => setError(null), 5000);
+    } else {
+      setError('No hardcoded secrets or GitHub tokens found in staged files.');
+      setTimeout(() => setError(null), 3000);
+    }
+  };
+
   const handleAddFile = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newFilePath || !newFileContent) return;
@@ -114,11 +145,13 @@ export const WorkspaceManager: React.FC<WorkspaceManagerProps> = ({
       languagesDetected: []
     };
 
+    const cleanContent = sanitizeTextSecrets(newFileContent).text;
+
     const newExtractedFile: ExtractedFile = {
       path: newFilePath.replace(/\\/g, '/').replace(/^\/+/, ''),
-      content: newFileContent,
+      content: cleanContent,
       isBinary: false,
-      size: new Blob([newFileContent]).size,
+      size: new Blob([cleanContent]).size,
     };
 
     const updatedFiles = [...analysis.files.filter(f => f.path !== newExtractedFile.path), newExtractedFile];
@@ -148,7 +181,8 @@ export const WorkspaceManager: React.FC<WorkspaceManagerProps> = ({
     
     let content: string | Uint8Array;
     if (!isBinary) {
-      content = new TextDecoder().decode(buffer);
+      const rawText = new TextDecoder().decode(buffer);
+      content = sanitizeTextSecrets(rawText).text;
     } else {
       content = new Uint8Array(buffer);
     }
@@ -198,7 +232,15 @@ export const WorkspaceManager: React.FC<WorkspaceManagerProps> = ({
         </div>
 
         {zipAnalysis && (
-          <div className="flex items-center space-x-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={handleSanitizeSecrets}
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 rounded-xl border border-emerald-500/20 transition"
+              title="Redact hardcoded API keys/GitHub tokens from staged files"
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Sanitize Secrets</span>
+            </button>
             <button
               onClick={handleCleanJunkFiles}
               className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 rounded-xl border border-amber-500/20 transition"
