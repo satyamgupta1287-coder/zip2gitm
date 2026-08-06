@@ -77,7 +77,7 @@ export async function runWithConcurrency<T, R>(
 }
 
 export async function validateGithubToken(token: string): Promise<GitHubUser> {
-  token = token.replace(/[^a-zA-Z0-9_]/g, '');
+  token = token.trim();
   const res = await fetchWithRetry(`${GITHUB_API_BASE}/user`, {
     headers: getHeaders(token),
   });
